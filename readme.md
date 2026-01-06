@@ -27,14 +27,14 @@
 **代码位置**：`RefundTicketMonitor` 类的 `__init__` 方法中。
 ```python
 self.base_params = {
-    "StartNodeGis": "经度,纬度",           # 【需替换】起点GPS坐标
-    "ArrivalNodeGis": "经度,纬度",         # 【需替换】终点GPS坐标
-    "StartCityCode": "城市区号",           # 【需替换】起点城市代码
-    "ArrivalCityCode": "城市区号",         # 【需替换】终点城市代码
-    "StartNodeName": "起点站名",           # 【需替换】如“珠海市官塘公交站”
-    "StartNodeDistrictName": "起点区县",    # 【需替换】如“香洲区”
-    "ArrivalNodeName": "终点站名",         # 【需替换】如“南城市民中心地铁站”
-    "ArrivalNodeDistrictName": "终点区县"  # 【需替换】如“南城街道”
+    "StartNodeGis": "经度,纬度",           # 【需替换】
+    "ArrivalNodeGis": "经度,纬度",         # 【需替换】
+    "StartCityCode": "城市区号",           # 【需替换】
+    "ArrivalCityCode": "城市区号",         # 【需替换】
+    "StartNodeName": "起点站名",           # 【需替换】
+    "StartNodeDistrictName": "起点区县",    # 【需替换】
+    "ArrivalNodeName": "终点站名",         # 【需替换】
+    "ArrivalNodeDistrictName": "终点区县"  # 【需替换】
 }
 ```
 
@@ -81,14 +81,14 @@ def update_params(self):
 ```python
 self.headers = {
     # 【最关键】身份验证令牌，会过期，需定期手动更新
-    "authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbG...（很长一串字符）",
+    "authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbG...（很长一串字符）",# 【需替换】
     
     # 以下字段通常可直接复用，模拟微信小程序环境
-    "user-agent": "",
-    "content-type": "application/json",
-    "iswxapp": "1",
+    "user-agent": "",# 【需替换】
+    "content-type": "application/json",# 【需替换】
+    "iswxapp": "1",# 【需替换】
     "agentappid": "xxx",      # 【需替换】应用ID
-    "accept": "*/*",
+    "accept": "*/*",# 【需替换】
     "referer": "" # 【需替换】
 }
 ```
