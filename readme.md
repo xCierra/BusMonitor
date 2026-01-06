@@ -18,49 +18,106 @@
 2. **请求头 (`headers`)**：在 `RefundTicketMonitor` 类的 `__init__` 方法中。
 3. **请求参数 (`base_params`)**：在 `RefundTicketMonitor` 类的 `__init__` 方法中。
 
-### 2. 如何获取动态参数 (关键步骤)
-`authorization` 令牌和 `_JsonText` 等参数会过期或变化，需要手动从网站获取。请按以下步骤操作：
+### 2. 请求参数详解：固定参数与动态更新
+脚本的请求参数采用“固定基础参数 + 动态更新”的设计，这是保证查询准确性和代码可维护性的关键。
 
-**步骤一：模拟一次手动查询**
-1.  在 **电脑浏览器**（推荐 Chrome 或 Edge）中，访问你通常查询该线路车票的 **官方网站或小程序网页版**。
-2.  按 `F12` 打开“开发者工具”，切换到 **“网络” (Network)** 标签。
-3.  在网站上，**手动执行一次完整的车票查询**：选择“xxx”作为起点，“xxx”作为终点，选择一个日期，点击查询。
+#### 基础固定参数 (`base_params`)
+这些参数定义了要监控的**固定线路信息**，存储在 `base_params` 字典中。
 
-**步骤二：捕获网络请求并提取参数**
-1.  在开发者工具的“网络”请求列表中，寻找一个包含 `GisLineClassDayNewQuery` 关键词的请求（通常是 `GET` 类型）。
-2.  点击该请求，在右侧面板中查看其“标头” (`Headers`) 和“载荷” (`Payload`)。
-3.  **复制请求头 (`authorization`)**
-    *   在“请求标头”部分，找到 `authorization` 字段。
-    *   将其**完整的值**（一串以 `eyJ...` 开头的长字符）复制出来。
-    *   **修改位置**：粘贴到代码 `RefundTicketMonitor` 类 `__init__` 方法中，替换 `headers` 字典里旧的 `authorization` 值。
-    ```python
-    self.headers = {
-        "authorization": "这里粘贴你刚复制的全新长令牌", # <--- 修改这里
-        "user-agent": "Mozilla/5.0 ...",
-        # ... 其他头
-    }
-    ```
-4.  **复制查询参数 (`_JsonText` 等)**
-    *   切换到“载荷” (`Payload`) 标签，查看 `Query String Parameters`。
-    *   你需要关注并确保与代码中 `base_params` 及 `update_params` 方法里生成的参数一致，特别是 `_JsonText`。你可以直接复制 `_JsonText` 的完整值。
-    *   **修改位置**：此参数主要在 `update_params` 方法中通过 `json.dumps` 生成。如果你复制的 `_JsonText` 结构与原代码不同，你可能需要调整 `_JsonText` 字典的内容，确保其包含必要的定位和搜索信息。
-
-### 3. QQ邮件通知配置 (`EMAIL_CONFIG`)
-此配置位于脚本文件**开头的 import 语句之后**，用于设置邮件提醒。
-
+**代码位置**：`RefundTicketMonitor` 类的 `__init__` 方法中。
 ```python
-EMAIL_CONFIG = {
-    'smtp_server': 'smtp.qq.com',       # QQ邮箱SMTP服务器，固定
-    'smtp_port': 465,                    # SSL加密端口，固定
-    'sender_email': '你的QQ邮箱@qq.com',  # 【需修改】发件人QQ邮箱
-    'sender_name': '车票监控助手',        # 发件人显示名称，可自定义
-    'authorization_code': '你的16位授权码', # 【关键】在QQ邮箱设置中生成的授权码，不是密码！
-    'receiver_email': '接收通知的邮箱地址'   # 【需修改】接收提醒的邮箱
+self.base_params = {
+    "StartNodeGis": "经度,纬度",           # 【需替换】起点GPS坐标
+    "ArrivalNodeGis": "经度,纬度",         # 【需替换】终点GPS坐标
+    "StartCityCode": "城市区号",           # 【需替换】起点城市代码
+    "ArrivalCityCode": "城市区号",         # 【需替换】终点城市代码
+    "StartNodeName": "起点站名",           # 【需替换】如“珠海市官塘公交站”
+    "StartNodeDistrictName": "起点区县",    # 【需替换】如“香洲区”
+    "ArrivalNodeName": "终点站名",         # 【需替换】如“南城市民中心地铁站”
+    "ArrivalNodeDistrictName": "终点区县"  # 【需替换】如“南城街道”
 }
 ```
-**配置要点**：
-- **`authorization_code`**：最重要的凭证。请在QQ邮箱网页版（设置 → 账户 → POP3/IMAP服务）中开启服务后生成。
-- **`sender_email` 与 `receiver_email`**：可以设置为同一个邮箱。
+
+#### 动态参数更新 (`params.update`)
+这是脚本的**核心机制**。通过 `update_params()` 方法，将动态参数（主要是日期）合并到基础参数中，形成每次查询的完整请求。
+
+**工作流程**：
+1.  **复制固定参数**：创建 `self.params` 字典作为 `self.base_params` 的副本，避免污染原数据。
+2.  **合并动态参数**：使用 `update()` 方法将动态的日期、时间戳等参数添加进去。
+3.  **生成完整参数**：形成包含所有必填项的最终查询参数。
+
+**关键代码**（在 `update_params` 方法中）：
+```python
+def update_params(self):
+    # 1. 复制基础固定参数
+    self.params = self.base_params.copy()
+    
+    # 2. 更新动态参数
+    self.params.update({
+        # 动态日期参数（由用户输入的 self.target_date 决定）
+        "BeginDate": f"{self.target_date} 00:00",
+        "EndDate": f"{self.target_date} 23:59",
+        # 动态生成的JSON文本，包含时间戳、定位信息等
+        "_JsonText": json.dumps({
+            "IsNewSearch": True,
+            "HasLocation": True,
+            "InTiimeStamp": int(time.time() * 1000), # 当前毫秒级时间戳
+            "LocationGis": "经度,纬度",              # 【需替换】当前定位坐标
+            "LocationDistrict": "区县名",           # 【需替换】当前定位区县
+            # ... 根据实际API要求补充其他字段
+        })
+    })
+```
+
+**这种设计的优势**：
+- **维护方便**：修改线路信息只需改 `base_params` 一处；修改日期逻辑只需看 `update_params` 方法。
+- **避免错误**：防止在构造多次请求时遗漏或错写固定参数。
+- **灵活复用**：同一套线路信息可轻松查询不同日期。
+
+### 3. 请求头配置 (`headers`)
+请求头用于API的身份验证和客户端标识。
+
+**代码位置**：`RefundTicketMonitor` 类的 `__init__` 方法中，`self.base_params` 之后。
+```python
+self.headers = {
+    # 【最关键】身份验证令牌，会过期，需定期手动更新
+    "authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbG...（很长一串字符）",
+    
+    # 以下字段通常可直接复用，模拟微信小程序环境
+    "user-agent": "",
+    "content-type": "application/json",
+    "iswxapp": "1",
+    "agentappid": "xxx",      # 【需替换】应用ID
+    "accept": "*/*",
+    "referer": "" # 【需替换】
+}
+```
+
+### 4. 如何获取这些参数？（关键步骤）
+`authorization` 令牌、`_JsonText` 结构以及所有 `【需替换】` 标记的值，都需要从目标网站手动获取一次。
+
+**获取步骤**：
+1.  **手动查询**：在电脑浏览器中访问目标车票查询网站或小程序网页版，进行一次完整的线路查询。
+2.  **打开开发者工具**：按 `F12`，切换到 **“网络”(Network)** 标签。
+3.  **捕获请求**：在请求列表中，寻找包含 `GisLineClassDayNewQuery` 或类似关键词的 `GET` 请求。
+4.  **提取信息**：
+    - **`authorization`**：在该请求的 **“请求头”(Headers)** 中找到并复制。
+    - **所有参数**：在该请求的 **“载荷”(Payload)** 或 **“查询参数”(Query String Parameters)** 中，找到 `StartNodeGis`、`ArrivalNodeGis`、`_JsonText` 等所有字段及其对应的值。
+5.  **替换到代码中**：将复制到的值，逐一替换到上述代码片段的对应位置。
+
+### 5. QQ邮件通知配置 (`EMAIL_CONFIG`)
+此配置位于脚本文件**开头的 import 语句之后**，用于设置邮件提醒。
+```python
+EMAIL_CONFIG = {
+    'smtp_server': 'smtp.qq.com',       # 固定
+    'smtp_port': 465,                    # 固定
+    'sender_email': '你的QQ邮箱@qq.com',  # 【需替换】发件邮箱
+    'sender_name': '车票监控助手',        # 可自定义
+    'authorization_code': '你的16位授权码', # 【关键】在QQ邮箱设置中生成
+    'receiver_email': '接收通知的邮箱地址'   # 【需替换】收件邮箱
+}
+```
+**授权码获取**：登录QQ邮箱网页版 → 设置 → 账户 → 开启“IMAP/SMTP服务” → 生成16位授权码。
 
 ## ⚙️ 核心函数说明
 
@@ -83,25 +140,11 @@ EMAIL_CONFIG = {
 ### 2. 邮件发送函数：`send_email_notification(subject, content)`
 被主函数调用，独立发送邮件。
 
-**工作流程**：
-1.  **构建邮件**：使用 `EMAIL_CONFIG` 配置。
-2.  **安全连接**：通过SSL连接QQ邮箱SMTP服务器 (`smtp.qq.com:465`)。
-3.  **登录发送**：使用邮箱和授权码登录后发送。
-4.  **错误处理**：捕获并提示常见错误（如认证失败）。
-
 ## 🚀 快速开始
+1.  **环境**：安装 Python 3.7+，执行 `pip install requests urllib3`。
+2.  **配置（最关键）**：按上述步骤获取并替换 `headers`、`base_params` 和 `EMAIL_CONFIG` 中的所有 `【需替换】` 内容。
+3.  **运行**：执行 `python bus_monitor.py`，按提示操作。
 
-### 1. 环境准备
-确保系统已安装 **Python 3.7+**。
-
-### 2. 安装依赖
-```bash
-pip install requests urllib3
-```
-
-### 3. 获取并更新配置（最重要！）
-1.  **获取API令牌与参数**：严格按照上文 **`核心配置与参数获取`** 部分的步骤，从网站获取最新的 `authorization` 令牌和查询参数，并更新到代码的对应位置。
-2.  **配置邮件通知**：按照上文说明，填写 `EMAIL_CONFIG` 字典中的所有字段，特别是正确的QQ邮箱授权码。
 
 ### 4. 运行脚本
 1.  在终端中运行脚本：
@@ -129,7 +172,7 @@ pip install requests urllib3
 
 **Q：运行后提示“登陆已过期”或“未找到任何班次信息”？**
 
-A：这几乎总是因为 `authorization` 令牌失效。请严格按照 **`核心配置与参数获取`** 部分的步骤，重新获取并替换代码中的令牌。同时检查请求参数（如 `_JsonText`）是否也已更新。
+A：`authorization`令牌已失效。请严格按照`如何获取这些参数？` 步骤重新获取并替换
 
 **Q：收不到邮件通知？**
 
@@ -140,7 +183,7 @@ A：请按顺序检查：
 
 **Q：如何监控另一条线路？**
 
-A：需要修改代码中的请求参数。主要更新 `RefundTicketMonitor` 类 `__init__` 方法里的 `base_params` 字典，包括起终点的名称、GIS坐标、城市代码等。之后，同样需要按照 **`核心配置与参数获取`** 步骤，用新线路手动查询一次，以获取对应的新令牌和参数。
+A：需要更新`base_params`字典中的所有字段，并重新获取对应的`authorization`令牌和`_JsonText`参数。
 
 ## 📄 免责声明
 本项目仅供学习和技术交流使用。请务必合理设置查询频率，尊重目标网站的服务压力。车票信息请以官方平台为准，开发者不对因使用此工具而导致的任何问题负责。
